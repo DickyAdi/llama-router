@@ -1,0 +1,11 @@
+models:
+  Qwen3-Embedding:
+    container_name: Qwen3-Embedding
+    port: 8080
+    gpu_id: 0
+    model_path: "models/Qwen3-Embedding/Qwen3-Embedding-0.6B-f16.gguf"
+  Gemma3:
+    container_name: Gemma3
+    port: 8081
+    gpu_id: 0
+    model_path: "models/gemma3-4b-gguf/gemma-3-4b-it-Q4_1.gguf"

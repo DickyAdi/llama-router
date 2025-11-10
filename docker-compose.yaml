@@ -1,0 +1,16 @@
+services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CONTAINERS=1
+      - POST=1
+      - START=1
+      - STOP=1
+    networks:
+      - llm-networks
+    restart: unless-stopped
+
+  llama-router:
+    build: ./
