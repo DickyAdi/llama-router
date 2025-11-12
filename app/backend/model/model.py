@@ -27,14 +27,13 @@ async def chat_proxy_requests(req:Request):
         _succ = await ContainerManager.start_container(model_name)
 
     config = model_config['models'][model_name]
-    target_url = f'http://localhost:{config['port']}{req.url.path}'
+    target_url = f'http://{config['container_name']}:{config['port']}{req.url.path}'
 
     try:
         async with httpx.AsyncClient() as http_client:
             resp = await http_client.post(
                 url=target_url,
                 json=body,
-                headers=dict(req.headers),
                 timeout=300.0
             )
 

@@ -7,7 +7,7 @@ from logger import get_logger
 from .config import load_config
 from exceptions import ContainerUnhealthyError, ContainerError, ModelNotFound, ContainerNotFound
 
-model_config = load_config('../config.yaml')
+model_config = load_config('config.yaml')
 
 client = docker.from_env()
 # client = None # for testing the API, later delete this when ready to write the docker compose
@@ -17,7 +17,8 @@ logger = get_logger()
 
 class ContainerManager:
     @staticmethod
-    async def start_container(model_name:str) -> bool:
+    async def start_container(model_name:str, timeout=120) -> bool:
+        # exponential_wait = [1,2,4,8,6,10,12,14,16,18,20]
         if model_name not in model_config['models']:
             # return False
             raise ModelNotFound(model_name)
@@ -31,21 +32,31 @@ class ContainerManager:
                 container.start()
             else:
                 logger.info(f'Container {container_name} already running.')
-            await asyncio.sleep(2)
-            for i in range(30):
+                return True
+            await asyncio.sleep(10)
+            start_time = time.time()
+            attempt = 0
+            while time.time() - start_time <= timeout:
                 try:
                     async with httpx.AsyncClient() as http_client:
                         response = await http_client.get(
-                            url=f'http://localhost:{config['port']}/health',
-                            timeout=2.0
+                            url=f'http://{container_name}:{config['port']}/health'
                         )
                         if response.status_code == 200:
                             logger.info(f'Container {container_name} is ready.')
                             container_status[model_name] = True
                             return True
-                except Exception:
-                    await asyncio.sleep(2)
-            # logger.error(f'Container {container_name} failed to start.')
+                except httpx.ConnectError as e:
+                    logger.warning(f'Health check attempt - Connection failed: {e}')
+                except httpx.TimeoutException as e:
+                    logger.warning(f'Health check attempt - Timeout: {e}')
+                except Exception as e:
+                    logger.warning(f'Health check attempt - Unexpected error: {type(e).__name__}: {e}')
+
+                # delay = exponential_wait[min(attempt, len(exponential_wait)-1)]
+                await asyncio.sleep(5)
+                attempt+=1
+                    
             raise ContainerUnhealthyError(container_name)
         except Exception:
             # logger.error(f'Error when starting container {container_name}', exc_info=e)

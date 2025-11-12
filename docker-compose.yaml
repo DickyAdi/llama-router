@@ -9,8 +9,78 @@ services:
       - START=1
       - STOP=1
     networks:
-      - llm-networks
+      - llm-network
     restart: unless-stopped
 
   llama-router:
-    build: ./
+    build: ./app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - DOCKER_HOST=tcp://docker-proxy:2375
+    restart: unless-stopped
+    networks:
+      - llm-network
+    depends_on:
+      - docker-proxy
+  
+  Qwen3-Embedding:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    container_name: Qwen3-Embedding
+    volumes:
+      - ./models/Qwen3-Embedding:/models/Qwen3-Embedding:ro
+    command:
+      - --model
+      - /models/Qwen3-Embedding/Qwen3-Embedding-0.6B-f16.gguf
+      - --gpu-layers
+      - "99"
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8080"
+      - --embeddings
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    networks:
+      - llm-network
+    profiles:
+      - manual
+
+  Gemma3:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    container_name: Gemma3
+    volumes:
+      - ./models/gemma3-4b-gguf:/models/gemma3-4b-gguf:ro
+    command:
+      - --model
+      - /models/gemma3-4b-gguf/gemma-3-4b-it-Q4_1.gguf
+      - --gpu-layers
+      - "99"
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8080"
+      - --ctx-size
+      - "8192"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    networks:
+      - llm-network
+    profiles:
+      - manual
+
+networks:
+  llm-network:
+    driver: bridge
