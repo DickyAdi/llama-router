@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import StreamingResponse
 import time
 import httpx
 
-from ._internals import ContainerManager, last_request_time, container_status, model_config
+# from ._internals import ContainerManager, last_request_time, container_status, model_config
+from ._internals import ContainerManager, model_config
 from logger import get_logger
 
 router = APIRouter()
@@ -13,21 +14,24 @@ logger = get_logger()
 @router.post('/v1/chat/completions')
 @router.post('/v1/embeddings')
 async def chat_proxy_requests(req:Request):
-    global last_request_time
-    global container_status
+    # global last_request_time
+    # global container_status
     global model_config
-
+    CONTAINER_MANAGER:ContainerManager = req.app.state.container_manager
     body = await req.json()
     model_name = body.get('model')
 
-    last_request_time[model_name] = time.time()
+    # last_request_time[model_name] = time.time()
+    CONTAINER_MANAGER.update_last_request_time(model_name)
     
-    if not container_status.get(model_name, False):
-        logger.info(f'Cold starting container for {model_name}')
-        _succ = await ContainerManager.start_container(model_name)
+    # if not container_status.get(model_name, False):
+    if not CONTAINER_MANAGER._server_status.get(model_name, False):
+        logger.info(f'Cold starting server for {model_name}')
+        _succ = await CONTAINER_MANAGER.start_container(model_name)
 
-    config = model_config['models'][model_name]
-    target_url = f'http://{config['container_name']}:{config['port']}{req.url.path}'
+    # config = model_config['models'][model_name]
+    config = model_config['models'].get(model_name)
+    target_url = f'http://{model_config['server']['host']}:{config['port']}{req.url.path}'
 
     try:
         async with httpx.AsyncClient() as http_client:
@@ -48,12 +52,8 @@ async def chat_proxy_requests(req:Request):
     except Exception:
         raise
 
-# @router.post('/v1/embeddings')
-# async def embedding_proxy_requests(req:Request):
-#     global
-
 
 @router.get("/health")
-async def health():
-    global container_status
-    return {"status": "ok", "active_models": [k for k, v in container_status.items() if v]}
+async def health(request:Request):
+    manager:ContainerManager = request.app.state.container_manager
+    return {"status": "ok", "active_models": [k for k, v in manager._server_status.items() if v]}
