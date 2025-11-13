@@ -1,2 +1,2 @@
-from .exception import BaseError, ModelNotFound, ContainerError, ContainerNotFound, ContainerUnhealthyError
+from .exception import BaseError, ModelNotFound, ContainerError, ContainerNotFound, ContainerUnhealthyError, ModelFileError, ContainerExitedEarly
 from .handler import error_handler, unexpected_error_handler
