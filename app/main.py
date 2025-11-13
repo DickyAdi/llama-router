@@ -12,12 +12,12 @@ async def lifespan(app: FastAPI):
     app.state.container_manager = manager
     asyncio.create_task(check_stop_idle_containers(manager))
     yield
+    await manager.stop_all_container()
     #post start
 
 app = FastAPI(lifespan=lifespan)
 
 
-# app.add_route(router)
 app.include_router(router)
 app.add_exception_handler(BaseError, error_handler)
 app.add_exception_handler(Exception, unexpected_error_handler)
