@@ -12,3 +12,8 @@ models:
     model_path: "~/llama-router/models/gemma3-4b-gguf/gemma-3-4b-it-Q4_1.gguf"
     port: 8080
     config: ["--no-webui", "--ctx-size", "2048"]
+
+  Qwen2.5:
+    model_path: "~/llama-router/models/Qwen2.5-gguf/qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf"
+    port: 8082
+    config: ["--no-webui", "--ctx-size", "2048"]

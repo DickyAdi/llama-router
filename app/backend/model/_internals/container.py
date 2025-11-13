@@ -1,11 +1,13 @@
 import asyncio
 import time
 import pathlib
+from pathlib import Path
+import re
 import httpx
 
 from logger import get_logger
 from .config import load_config
-from exceptions import ContainerUnhealthyError, ContainerError, ModelNotFound, ContainerNotFound
+from exceptions import ContainerUnhealthyError, ContainerError, ModelNotFound, ContainerNotFound, ModelFileError, ContainerExitedEarly
 
 model_config = load_config('config.yaml')
 
@@ -19,6 +21,11 @@ class ContainerManager:
         self._server_status:dict[str, bool] = {}
         self._server_proc:dict[str, asyncio.subprocess.Process] = {}
         self._locks:dict[str, asyncio.Lock] = {}
+
+    def _validate_gguf_file(self, path_str:str):
+        pat = re.compile(r'0*1-of-\d+\.gguf$', re.IGNORECASE)
+        path = Path(path_str)
+        return (path.exists() and path.is_file() and path.suffix == '.gguf') or bool(pat.search(path_str))
     
     async def start_container(self, model_name:str, timeout=120) -> True:
         """Start container/server for the given `model_name`. This method will be based on the given config.
@@ -45,6 +52,8 @@ class ContainerManager:
         config = model_config['models'][model_name]
         port = config['port']
         model_path = str(pathlib.Path(config['model_path']).expanduser().resolve())
+        if not self._validate_gguf_file(model_path):
+            raise ModelFileError(model_path=model_path, model_name=model_name)
         flag_config = config['config']
 
         async with self._locks[model_name]:
@@ -62,9 +71,11 @@ class ContainerManager:
 
                 await asyncio.sleep(2)
 
+                if proc.returncode is not None:
+                    raise ContainerExitedEarly(ret_code=proc.returncode, model_name=model_name)
+
                 start_time = time.time()
                 while time.time() - start_time <= timeout:
-                    # for i in range(30):
                     try:
                         async with httpx.AsyncClient(timeout=5.0) as http_client:
                             response = await http_client.get(
@@ -85,7 +96,6 @@ class ContainerManager:
                 raise ContainerUnhealthyError(model_name)
             except Exception:
                 raise ContainerError(model_name)
-
     
     async def stop_container(self, model_name:str):
         """Will stop the running container/server based on the given `model_name`
@@ -110,9 +120,10 @@ class ContainerManager:
                 self._server_status[model_name] = False
                 
                 try:
+                    logger.info(f'Terminating server for model {model_name} gracefully')
                     proc.terminate()
                     await asyncio.wait_for(proc.wait(), timeout=15)
-                    logger.info(f'Terminating server for model {model_name} gracefully')
+                    logger.info(f'Server for model {model_name} terminated gracefully')
                 except asyncio.TimeoutError:
                     logger.warning(f'Server for model {model_name} hung out. Killing with SIGKILL')
                     proc.kill()
