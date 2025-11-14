@@ -1,3 +1,4 @@
+import os
 import asyncio
 import time
 import pathlib
@@ -9,7 +10,9 @@ from logger import get_logger
 from .config import load_config
 from exceptions import ContainerUnhealthyError, ContainerError, ModelNotFound, ContainerNotFound, ModelFileError, ContainerExitedEarly
 
-model_config = load_config('config.yaml')
+config_yaml_path = os.getenv('CONFIG_PATH', '/app')
+model_dir_path = os.getenv('MODEL_PATH', '/app/models')
+model_config = load_config(path_file=os.path.join(config_yaml_path, 'config.yaml'))
 
 logger = get_logger()
 
@@ -20,12 +23,27 @@ class ContainerManager:
         self._last_request_time:dict[str, float] = {}
         self._server_status:dict[str, bool] = {}
         self._server_proc:dict[str, asyncio.subprocess.Process] = {}
+        self._validated_file_path:dict[str, bool] = {}
         self._locks:dict[str, asyncio.Lock] = {}
 
     def _validate_gguf_file(self, path_str:str):
-        pat = re.compile(r'0*1-of-\d+\.gguf$', re.IGNORECASE)
+        if path_str in self._validated_file_path:
+            return True
+        
         path = Path(path_str)
-        return (path.exists() and path.is_file() and path.suffix == '.gguf') or bool(pat.search(path_str))
+        if not (path.exists() and path.is_file() and path.suffix == '.gguf'):
+            return False
+        
+        pat = re.compile(r'(\d+)-of-(\d+)\.gguf$', re.IGNORECASE)
+        if match := pat.search(path_str):
+            is_valid_shard = 1 == int(match.group(1))
+            if is_valid_shard:
+                self._validated_file_path[path_str] = is_valid_shard
+            return is_valid_shard
+
+        self._validated_file_path[path_str] = True
+             
+        return True
     
     async def start_container(self, model_name:str, timeout=120) -> True:
         """Start container/server for the given `model_name`. This method will be based on the given config.
@@ -48,10 +66,11 @@ class ContainerManager:
             self._locks[model_name] = asyncio.Lock()
         
         cwd = model_config['server']['llama_server_path']
+        logger.info(f"Printing cwd llama server path based on config {cwd}")
         host = model_config['server']['host']
         config = model_config['models'][model_name]
         port = config['port']
-        model_path = str(pathlib.Path(config['model_path']).expanduser().resolve())
+        model_path = str(pathlib.Path(os.path.join(model_dir_path, config['model_path'])).expanduser().resolve())
         if not self._validate_gguf_file(model_path):
             raise ModelFileError(model_path=model_path, model_name=model_name)
         flag_config = config['config']
@@ -60,7 +79,8 @@ class ContainerManager:
             if self._server_status.get(model_name, False):
                 logger.info(f'Server for model {model_name} already running...')
                 return True
-            cmd = ['./llama-server', '-m', str(model_path),'--host', str(host), '--port', str(port), *flag_config]
+            cmd = ['./llama-server' if cwd is not None else 'llama-server', '-m', str(model_path),'--host', str(host), '--port', str(port), *flag_config]
+            logger.info(f'Printing executed cmd {cmd}')
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
@@ -153,7 +173,7 @@ class ContainerManager:
         else:
             logger.info('All running server stopped succesfully')
 
-    def update_last_request_time(self, model_name:str):
+    async def update_last_request_time(self, model_name:str):
         """Update last request time for the given model container/server
 
         Args:

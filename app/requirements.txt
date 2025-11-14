@@ -46,3 +46,4 @@ fastapi[standard]
 httpx
 pyyaml
 docker
+nvidia-ml-py

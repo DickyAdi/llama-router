@@ -209,3 +209,4 @@ __marimo__/
 # owned ignore
 models/*
 experiment/*
+app/models*
