@@ -2,8 +2,8 @@ services:
   llama-router:
     image: llama.router:dev.0.1
     volumes:
-      - /home/opus-indonesia/llama-router/models:/app/models
-      - /home/opus-indonesia/llama-router/config.yaml:/app/config.yaml
+      - /llama-router/models:/app/models
+      - /llama-router/config.yaml:/app/config.yaml
     ports:
       - "8000:8000"
     deploy:
