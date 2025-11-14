@@ -1,3 +1,4 @@
+import os
 import asyncio
 import time
 import pathlib
@@ -9,7 +10,9 @@ from logger import get_logger
 from .config import load_config
 from exceptions import ContainerUnhealthyError, ContainerError, ModelNotFound, ContainerNotFound, ModelFileError, ContainerExitedEarly
 
-model_config = load_config('config.yaml')
+config_yaml_path = os.getenv('CONFIG_PATH', '/app')
+model_dir_path = os.getenv('MODEL_PATH', '/app/models')
+model_config = load_config(path_file=os.path.join(config_yaml_path, 'config.yaml'))
 
 logger = get_logger()
 
@@ -48,10 +51,12 @@ class ContainerManager:
             self._locks[model_name] = asyncio.Lock()
         
         cwd = model_config['server']['llama_server_path']
+        logger.debug(f"Printing cwd llama server path based on config {cwd}")
         host = model_config['server']['host']
         config = model_config['models'][model_name]
         port = config['port']
-        model_path = str(pathlib.Path(config['model_path']).expanduser().resolve())
+        # model_path = str(pathlib.Path(config['model_path']).expanduser().resolve())
+        model_path = os.path.join(model_dir_path, config['model_path'])
         if not self._validate_gguf_file(model_path):
             raise ModelFileError(model_path=model_path, model_name=model_name)
         flag_config = config['config']
@@ -60,7 +65,8 @@ class ContainerManager:
             if self._server_status.get(model_name, False):
                 logger.info(f'Server for model {model_name} already running...')
                 return True
-            cmd = ['./llama-server', '-m', str(model_path),'--host', str(host), '--port', str(port), *flag_config]
+            cmd = ['./llama-server' if cwd is not None else 'llama-server', '-m', str(model_path),'--host', str(host), '--port', str(port), *flag_config]
+            logger.debug(f'Printing executed cmd {cmd}')
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
