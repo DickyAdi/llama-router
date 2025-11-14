@@ -19,6 +19,7 @@ Docker image is ready to built. Follow the step below to build the image:
 #### Model directory path definition
 When defining the models path, ensure the path points to the root of the models directory. Take a look at the example below.
 
+```
 .
 └── models/ <---- models path must refer to this directory
     ├── Qwen2.5/ <----- not this
@@ -27,6 +28,7 @@ When defining the models path, ensure the path points to the root of the models 
     │   └── Gemma3.gguf
     └── Qwen3-Embedding/ <----- or this
         └── Qwen3-Embedding.gguf
+```
 
 #### Config writing guide
 Here are the template of the config, which you could find in the config.template.yaml
