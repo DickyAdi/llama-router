@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, Depends
 from fastapi.responses import StreamingResponse
 import time
 import httpx
+import pynvml
 
 from ._internals import ContainerManager, model_config
 from logger import get_logger
@@ -29,13 +30,8 @@ async def chat_proxy_requests(req:Request):
     body = await req.json()
     model_name = body.get('model')
 
-    CONTAINER_MANAGER.update_last_request_time(model_name)
+    await CONTAINER_MANAGER.update_last_request_time(model_name)
     
-    # if not CONTAINER_MANAGER._server_status.get(model_name, False):
-    #     logger.info(f'Cold starting server for {model_name}')
-    #     _succ = await CONTAINER_MANAGER.start_container(model_name)
-
-    # if not CONTAINER_MANAGER._server_status.get(model_name, False):
     logger.info(f'Cold starting server for {model_name}')
     _succ = await CONTAINER_MANAGER.start_container(model_name)
 
@@ -73,4 +69,19 @@ async def health(request:Request):
         dict: Containing proxy server status and running model server status
     """
     manager:ContainerManager = request.app.state.container_manager
-    return {"status": "ok", "active_models": [k for k, v in manager._server_status.items() if v]}
+    n_gpu = request.app.state.available_gpus
+    gpu_det = []
+    if n_gpu:
+        for n in range(n_gpu):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(n)
+            name = pynvml.nvmlDeviceGetName(handle)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            used = info.used / 1024**3
+            total = info.total / 1024**3
+            gpu_det.append({
+                'gpu_name' : name,
+                'vram_usage': f'{used:.2f}/{total:.2f} GB'
+            })
+
+    return {"status": "ok", "active_models": [k for k, v in manager._server_status.items() if v], 'gpus': gpu_det}
+    # return {"status": "ok", "active_models": [k for k, v in manager._server_status.items() if v]}
