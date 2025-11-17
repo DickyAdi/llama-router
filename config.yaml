@@ -1,6 +1,6 @@
 server:
   llama_server_path:
-  host: "127.0.0.1"
+  host: "0.0.0.0"
 
 models:
   Qwen3-Embedding:
