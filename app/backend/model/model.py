@@ -92,13 +92,13 @@ async def list_models(request:Request):
     models = []
     for model, dict_value in manager._server_status.items():
         config = dict_value.get('config')
-        ctx_size = int(config.get('--ctx-size')) or int(config.get('-c')) or 4096 # llama.cpp default context is 4096
+        ctx_size = config.get('--ctx-size') or config.get('-c') or 4096 # llama.cpp default context is 4096
         models.append(
             {
                 'id': model,
                 'object':'model',
                 'owned_by': 'user',
-                'n_ctx': ctx_size
+                'n_ctx': int(ctx_size)
             }
         )
     return {
