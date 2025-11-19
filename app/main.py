@@ -15,7 +15,7 @@ from exceptions import error_handler, unexpected_error_handler, BaseError
 from logger import get_logger
 
 logger = get_logger()
-PRE_START = True if os.getenv('PRE_START').lower() == 'y' else False
+PRE_START = True if os.getenv('PRE_START', 'n').lower() == 'y' else False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
