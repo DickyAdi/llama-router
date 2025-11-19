@@ -5,6 +5,7 @@ import pathlib
 from pathlib import Path
 import re
 import httpx
+from typing import TypedDict
 
 from logger import get_logger
 from .config import load_config
@@ -14,6 +15,11 @@ config_yaml_path = os.getenv('CONFIG_PATH', '/app')
 model_dir_path = os.getenv('MODEL_PATH', '/app/models')
 model_config = load_config(path_file=os.path.join(config_yaml_path, 'config.yaml'))
 
+class ServerStatus(TypedDict):
+    status:bool
+    config:dict
+
+
 logger = get_logger()
 
 class ContainerManager:
@@ -21,7 +27,7 @@ class ContainerManager:
     """
     def __init__(self):
         self._last_request_time:dict[str, float] = {}
-        self._server_status:dict[str, bool] = {}
+        self._server_status:dict[str, ServerStatus] = {}
         self._server_proc:dict[str, asyncio.subprocess.Process] = {}
         self._validated_file_path:dict[str, bool] = {}
         self._locks:dict[str, asyncio.Lock] = {}
@@ -44,6 +50,27 @@ class ContainerManager:
         self._validated_file_path[path_str] = True
              
         return True
+    
+    def _split_flag(self, flags:list[str]) -> dict:
+        flag_dict = {}
+        tmp_flag = None
+        for flag in flags:
+            if flag.startswith('--') or flag.startswith('-'):
+                flag_dict[flag] = True
+                tmp_flag = flag
+            else:
+                flag_dict[tmp_flag] = flag
+        return flag_dict
+    
+    async def pre_start(self):
+        config_model = model_config['models']
+        logger.info(f'Starting all models. Found {len(config_model)} models')
+        for model_name in config_model:
+            _succ = await self.start_container(model_name)
+            if _succ:
+                continue
+            else:
+                asyncio.sleep(5)
     
     async def start_container(self, model_name:str, timeout=120) -> True:
         """Start container/server for the given `model_name`. This method will be based on the given config.
@@ -103,7 +130,11 @@ class ContainerManager:
                             )
                             if response.status_code == 200:
                                 logger.info(f'Server for model {model_name} is ready.')
-                                self._server_status[model_name] = True
+                                flag_dict = self._split_flag(flag_config)
+                                self._server_status[model_name] = {
+                                    'status': True,
+                                    'config': flag_dict
+                                }
                                 self._server_proc[model_name] = proc
                                 return True
                     except httpx.ConnectError as e:
@@ -137,7 +168,7 @@ class ContainerManager:
                     logger.info(f'Server for model {model_name} already stopped')
                     return
                 
-                self._server_status[model_name] = False
+                self._server_status[model_name]['status'] = False
                 
                 try:
                     logger.info(f'Terminating server for model {model_name} gracefully')
@@ -161,8 +192,8 @@ class ContainerManager:
         if not self._server_status:
             logger.info('No server running')
             return
-        for model_name, status in self._server_status.items():
-            if status:
+        for model_name, dict_val in self._server_status.items():
+            if dict_val['status']:
                 logger.info(f'Stopping model {model_name} server')
                 await self.stop_container(model_name)
             else:
@@ -192,7 +223,7 @@ async def check_stop_idle_containers(container_manager:"ContainerManager", idle_
         curr_time = time.time()
         for model_name, last_time in list(container_manager._last_request_time.items()):
             if curr_time - last_time > idle_time:
-                if container_manager._server_status.get(model_name, False):
+                if container_manager._server_status.get(model_name).get('status', False):
                     logger.info(f'Stopping idle server for model {model_name}')
                     await container_manager.stop_container(model_name)
 
