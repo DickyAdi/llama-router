@@ -1,3 +1,4 @@
+import os
 import dotenv
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
@@ -14,6 +15,7 @@ from exceptions import error_handler, unexpected_error_handler, BaseError
 from logger import get_logger
 
 logger = get_logger()
+PRE_START = True if os.getenv('PRE_START').lower() == 'y' else False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,9 +27,13 @@ async def lifespan(app: FastAPI):
         app.state.available_gpus = pynvml.nvmlDeviceGetCount()
     except Exception:
         logger.warning('Could not determine number of GPU using nvml. Skipping.')
-    await manager.pre_start()
+    if PRE_START:
+        logger.info('Starting with pre-start version')
+        await manager.pre_start()
+    else:
+        logger.info('Starting with load-on-demand version')
+        asyncio.create_task(check_stop_idle_containers(manager))
     app.state.container_manager = manager
-    # asyncio.create_task(check_stop_idle_containers(manager))
 
     yield
 
