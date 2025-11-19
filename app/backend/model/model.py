@@ -84,4 +84,24 @@ async def health(request:Request):
             })
 
     return {"status": "ok", "active_models": [k for k, v in manager._server_status.items() if v], 'gpus': gpu_det}
-    # return {"status": "ok", "active_models": [k for k, v in manager._server_status.items() if v]}
+
+
+@router.get('/v1/models')
+async def list_models(request:Request):
+    manager:ContainerManager = request.app.state.container_manager
+    models = []
+    for model, dict_value in manager._server_status.items():
+        config = dict_value.get('config')
+        ctx_size = int(config.get('--ctx-size')) or int(config.get('-c')) or 4096 # llama.cpp default context is 4096
+        models.append(
+            {
+                'id': model,
+                'object':'model',
+                'owned_by': 'user',
+                'n_ctx': ctx_size
+            }
+        )
+    return {
+        'type':'list',
+        'data': models
+    }

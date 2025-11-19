@@ -25,8 +25,9 @@ async def lifespan(app: FastAPI):
         app.state.available_gpus = pynvml.nvmlDeviceGetCount()
     except Exception:
         logger.warning('Could not determine number of GPU using nvml. Skipping.')
+    await manager.pre_start()
     app.state.container_manager = manager
-    asyncio.create_task(check_stop_idle_containers(manager))
+    # asyncio.create_task(check_stop_idle_containers(manager))
 
     yield
 
