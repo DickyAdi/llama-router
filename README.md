@@ -1,22 +1,40 @@
 # llama-router
 llama-cpp model router
 
+## Docker build
 Docker image is ready to built. Follow the step below to build the image:
 1. Clone the repo with `git clone https://github.com/DickyAdi/llama-router.git`
 2. Go to /app with `cd app/`
-3. Run docker build `docker build -t llama.router:latest .`
-4. After the build finish, run the image with this command below
+3. Run docker build `docker build -t llama-router:latest .`
+4. Wait for the process to finish and then go ahead check your docker image by doing `docker image ls`
+
+## Pull image
+You could also pull the latest image by running this command below
+`docker pull ghcr.io/dickyadi/llama-router:dev`
+
+## Docker run
+The router has multiple start option which are on-demand load or pre-start load
+- On-demand load
+Each model server will only be loaded when there's a request that needs that model. After several idle time, the server will be shutdown to reduce memory usages. Suits best if resource are constrained
+- Pre-start load
+All detected model will be loaded once the application start, with this load approach it will significantly cut model loading time when constantly switching the models. Suits best if require fast model switching, however beware of Out Of Memory (OOM)
+
+To use pre-start load, you could simply just provide `PRE_START="y"` in the docker run or compose. Look below
+
+1. Run the image with this command below
     ```sh
     docker run -d --gpus all -p 8000:8000 \
     -v [your models folder]:/app/models \
-    -v [your config.yaml file]:/app/config.yaml
-    llama.router:latest
+    -v [your config.yaml file]:/app/config.yaml \
+    -e PRE_START="y" \
+    llama-router:latest #or ghcr.io/dickyadi/llama-router:dev depending on where you have the image
     ```
-5. You could test the model router via localhost:8000/docs (FastAPI swagger UI) or using your endpoint tester such as postman or similar
+2. You could test the model router via localhost:8000/docs (FastAPI swagger UI) or using your endpoint tester such as postman or similar
 
-### Notes
 
-#### Model directory path definition
+## Notes
+
+### Model directory path definition
 When defining the models path, ensure the path points to the root of the models directory. Take a look at the example below.
 
 ```
@@ -30,7 +48,7 @@ When defining the models path, ensure the path points to the root of the models 
         └── Qwen3-Embedding.gguf
 ```
 
-#### Config writing guide
+### Config writing guide
 Here are the template of the config, which you could find in the config.template.yaml
 ```yaml
 server:
